@@ -1,0 +1,96 @@
+pipeline {
+
+    agent any
+
+    environment {
+        DOCKER_HUB = "ritishhire"
+
+        BACKEND_IMAGE = "${DOCKER_HUB}/shopwave-backend"
+        FRONTEND_IMAGE = "${DOCKER_HUB}/shopwave-frontend"
+    }
+
+    stages {
+
+        stage('Clone') {
+            steps {
+                git branch: 'main',
+                url: 'https://github.com/Ritishhire/web-ecommerce-jenkins-k8s.git'
+            }
+        }
+        stage('Build Images') {
+            steps {
+
+                sh '''
+                    docker build -t $BACKEND_IMAGE ./backend
+                    docker build -t $FRONTEND_IMAGE ./frontend
+                '''
+            }
+        }
+        stage('Trivy Scan') {
+            steps {
+
+                sh '''
+                    trivy image $BACKEND_IMAGE
+                    trivy image $FRONTEND_IMAGE
+                '''
+            }
+        }
+
+        stage('DockerHub Login') {
+            steps {
+
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+
+                    sh '''
+                        echo $DOCKER_PASS | docker login \
+                        -u $DOCKER_USER --password-stdin
+                    '''
+                }
+            }
+        }
+
+        stage('Push Images') {
+            steps {
+
+                sh '''
+                    docker push $BACKEND_IMAGE
+                    docker push $FRONTEND_IMAGE
+                '''
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+
+                sh '''
+                    docker compose down || true
+                    docker compose up -d
+
+                    sleep 15
+
+                    docker exec shopwave-backend node seed.js
+                '''
+            }
+        }
+    }
+
+    post {
+
+        success {
+
+            echo 'Application Deployed Successfully 🚀'
+            echo 'Frontend URL: http://127.0.0.1:8080'
+        }
+
+        failure {
+
+            echo 'Pipeline Failed ❌'
+        }
+    }
+}
