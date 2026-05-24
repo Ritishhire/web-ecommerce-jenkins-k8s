@@ -1,0 +1,7 @@
+# 00: create one clean namespace for all ShopWave resources.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shopwave
+  labels:
+    app.kubernetes.io/name: shopwave

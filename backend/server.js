@@ -26,7 +26,30 @@ app.use('/api/admin', require('./routes/admin'));
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'ShopWave API running!', timestamp: new Date() });
+  res.json({
+    status: 'OK',
+    message: 'ShopWave API running!',
+    timestamp: new Date()
+  });
+});
+
+// Readiness check for Kubernetes traffic routing
+app.get('/api/ready', (req, res) => {
+  const databaseReady = mongoose.connection.readyState === 1;
+
+  if (!databaseReady) {
+    return res.status(503).json({
+      status: 'NOT_READY',
+      database: 'disconnected',
+      timestamp: new Date()
+    });
+  }
+
+  res.json({
+    status: 'READY',
+    database: 'connected',
+    timestamp: new Date()
+  });
 });
 
 // Error handler

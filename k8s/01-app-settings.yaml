@@ -1,0 +1,26 @@
+# 01: shared application settings.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shopwave-config
+  namespace: shopwave
+  labels:
+    app.kubernetes.io/name: shopwave
+data:
+  NODE_ENV: production
+  PORT: "5000"
+  MONGO_INITDB_DATABASE: shopwave
+  MONGO_URI: mongodb://mongo:27017/shopwave
+  JWT_EXPIRE: 7d
+---
+# Change this value before using the manifests for a real public deployment.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: shopwave-secret
+  namespace: shopwave
+  labels:
+    app.kubernetes.io/name: shopwave
+type: Opaque
+stringData:
+  JWT_SECRET: shopwave_super_secret_jwt_key_2024

@@ -3,94 +3,79 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB = "ritishhire"
-
-        BACKEND_IMAGE = "${DOCKER_HUB}/shopwave-backend"
-        FRONTEND_IMAGE = "${DOCKER_HUB}/shopwave-frontend"
+        CLUSTER_NAME = 'shopwave-cluster'
+        NAMESPACE = 'shopwave'
+        BACKEND_IMAGE = 'ecommerce-web-backend:latest'
+        FRONTEND_IMAGE = 'ecommerce-web-frontend:latest'
     }
 
     stages {
 
-        stage('Clone') {
+        stage('Clone Code') {
             steps {
                 git branch: 'main',
-                url: 'https://github.com/Ritishhire/web-ecommerce-jenkins-k8s.git'
+                    url: 'https://github.com/Ritishhire/web-ecommerce-jenkins-k8s.git'
             }
         }
-        stage('Build Images') {
-            steps {
 
+        stage('Build Docker Images') {
+            steps {
                 sh '''
                     docker build -t $BACKEND_IMAGE ./backend
                     docker build -t $FRONTEND_IMAGE ./frontend
                 '''
             }
         }
-        stage('Trivy Scan') {
-            steps {
 
+        stage('Create Kubernetes Cluster') {
+            steps {
                 sh '''
-                    trivy image $BACKEND_IMAGE
-                    trivy image $FRONTEND_IMAGE
+                    if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
+                      echo "Cluster already exists"
+                    else
+                      kind create cluster --config k8s/kind-cluster.yaml
+                    fi
+
+                    kubectl config use-context kind-$CLUSTER_NAME
                 '''
             }
         }
 
-        stage('DockerHub Login') {
+        stage('Deploy To Kubernetes') {
             steps {
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )
-                ]) {
-
-                    sh '''
-                        echo $DOCKER_PASS | docker login \
-                        -u $DOCKER_USER --password-stdin
-                    '''
-                }
-            }
-        }
-
-        stage('Push Images') {
-            steps {
-
                 sh '''
-                    docker push $BACKEND_IMAGE
-                    docker push $FRONTEND_IMAGE
+                    kind load docker-image $BACKEND_IMAGE --name $CLUSTER_NAME
+                    kind load docker-image $FRONTEND_IMAGE --name $CLUSTER_NAME
+
+                    kubectl apply -k k8s
+
+                    kubectl -n $NAMESPACE rollout restart deployment/backend
+                    kubectl -n $NAMESPACE rollout restart deployment/frontend
+
+                    kubectl -n $NAMESPACE rollout status statefulset/mongo
+                    kubectl -n $NAMESPACE rollout status deployment/backend
+                    kubectl -n $NAMESPACE rollout status deployment/frontend
                 '''
             }
         }
 
-        stage('Deploy') {
+        stage('Seed Database') {
             steps {
-
                 sh '''
-                    docker compose down || true
-                    docker compose up -d
-
-                    sleep 15
-
-                    docker exec shopwave-backend node seed.js
+                    kubectl -n $NAMESPACE exec deployment/backend -- npm run seed
                 '''
             }
         }
     }
 
     post {
-
         success {
-
-            echo 'Application Deployed Successfully 🚀'
-            echo 'Frontend URL: http://127.0.0.1:8080'
+            echo 'Deployment completed successfully'
+            echo 'Frontend URL: http://127.0.0.1:30080'
         }
 
         failure {
-
-            echo 'Pipeline Failed ❌'
+            echo 'Pipeline failed'
         }
     }
 }
