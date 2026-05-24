@@ -1,0 +1,66 @@
+services:
+
+  mongo:
+    image: mongo:7
+    container_name: shopwave-mongo
+    restart: unless-stopped
+
+    environment:
+      MONGO_INITDB_DATABASE: shopwave
+
+    volumes:
+      - mongo_data:/data/db
+
+    networks:
+      - shopwave-net
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: shopwave-backend
+
+    restart: unless-stopped
+
+    depends_on:
+      mongo:
+        condition: service_started
+
+    environment:
+      PORT: 5000
+      MONGO_URI: mongodb://mongo:27017/shopwave
+      JWT_SECRET: shopwave_super_secret_jwt_key_2024
+      JWT_EXPIRE: 7d
+      NODE_ENV: production
+
+    ports:
+      - "5000:5000"
+
+    networks:
+      - shopwave-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    container_name: shopwave-frontend
+
+    restart: unless-stopped
+
+    depends_on:
+      backend:
+        condition: service_started
+
+    ports:
+      - "8080:80"
+
+    networks:
+      - shopwave-net
+
+volumes:
+  mongo_data:
+
+networks:
+  shopwave-net:
+    driver: bridge
